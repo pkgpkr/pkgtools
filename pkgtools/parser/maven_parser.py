@@ -1,0 +1,59 @@
+import logging
+import xml.etree.ElementTree as xml
+
+class MavenParser(object):
+
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+
+    def dependencies_to_purls(self, dependencies_object):
+        """
+        Convert Java dependencies names to the universal Package URL (PURL) format
+
+        arguments:
+            :dependencies: Entire pom.xml text file
+
+        returns:
+            list of dependencies in P-URL format
+        """
+
+        namespaces = {'xmlns': 'http://maven.apache.org/POM/4.0.0'}
+
+        try:
+            root = xml.fromstring(dependencies_object, parser=xml.XMLParser(encoding='utf-8'))
+            dependencies = root.findall(".//xmlns:dependency", namespaces=namespaces)
+
+            if dependencies:
+                purl_dependencies = []
+
+                for dependency in dependencies:
+                    groupId = dependency.find("xmlns:groupId", namespaces=namespaces)
+                    artifactId = dependency.find("xmlns:artifactId", namespaces=namespaces)
+                    version = dependency.find("xmlns:version", namespaces=namespaces)
+
+                    # WARNING: this is needed to treat '' as not None
+                    # TODO: verify this claim
+                    if groupId is None or artifactId is None:
+                        continue
+
+                    # WARNING: this is needed to treat '' as not None
+                    # TODO: verify this claim
+                    if version is not None:
+                        value = version.text
+
+                        if value.find('$') >= 0:
+                            value = ''
+
+                        purl_dependencies.append(f'pkg:maven/{groupId.text}/{artifactId.text}@{value}')
+                    else:
+                        purl_dependencies.append(f'pkg:maven/{groupId.text}/{artifactId.text}')
+
+                return purl_dependencies
+
+        except xml.ParseError as e:
+            self.logger.error(e)
+            return []
+
+
+
+        
