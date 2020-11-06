@@ -65,7 +65,7 @@ class GithubScraper(object):
         return res.json()['data']['repository']['object']['text']
 
 
-    def get_uris_by_name_with_owner(self, name_with_owner: str, branch:str) -> list:
+    def get_dependency_file_paths(self, name_with_owner: str, branch:str) -> list:
         """ Fetch the all depende of the file specified.
         Args:
             name_with_owner (str): name with owner of the repo to fetch paths from
@@ -107,9 +107,9 @@ class GithubScraper(object):
 
     def get_repos(self, start_date: datetime.date = None, end_date: datetime.date = None, **kwargs):
         """
+        Gets repos. Limit 1000.
 
-
-        kwargs (language: str = None, owner: str = None, stars=5) TODO comment this better
+        kwargs (languages: list = [], owner: str = None, stars=5) TODO comment this better
 
         Return:
             nodes (generator) {"nameWithOwner": string,
@@ -120,7 +120,10 @@ class GithubScraper(object):
                                }
         """
 
-        language = kwargs.get('language')
+        languages = kwargs.get('languages')
+        if not languages:
+            languages = SUPPORTED_LANGUAGES
+
         owner = kwargs.get('owner')
         stars = kwargs.get('stars')
 
@@ -146,6 +149,7 @@ class GithubScraper(object):
                     :cursor: DB cursor
                     :language: ecosystem language
 
+                Returns: TODO
                 """
 
                 query = """
@@ -171,10 +175,10 @@ class GithubScraper(object):
                     }
                     """
 
-                language_filter = f"language:{language}" if language else ''
+                language_filter = ' '.join([f"language:{language}" for language in languages])
                 stars_filter = f"stars:>{stars}" if stars else ''
                 owner_filter = f"user:{owner}" if owner else ''
-                date_range_filter = f"pushed: {date_range_str}" if date_range_str else ''
+                date_range_filter = f"pushed:{date_range_str}" if date_range_str else ''
 
                 variables = {
                     "queryString": ' '.join([language_filter, stars_filter, owner_filter, date_range_filter]),
@@ -188,6 +192,7 @@ class GithubScraper(object):
                                         headers=self.request_headers)
 
                 result = request.json()
+
 
                 if result['data']['search']['edges']:
                     # Get the next cursor
