@@ -1,51 +1,125 @@
+import json
 import logging
 import requests
 from datetime import datetime
 
+from ..globals import SUPPORTED_LANGUAGES, GITHUB_GRAPHQL_URL
+
+
 class GithubScraper(object):
 
     def __init__(self, token):
-    
+
         self.request_headers = {"Authorization": "Bearer " + token}
 
         GithubScraper._MAX_NODES_PER_LOOP = 100
         GithubScraper._GITHUB_V4_URL = 'https://api.github.com/graphql'
 
-
-
         self.logger = logging.getLogger(__name__)
 
+    def get_content_of_object(self, owner: str, repo:str, branch:str, file_path:str) -> str:
+        """ Fetch the content of the file specified.
+        Args:
+            owner: owner of the repo (must match the one in repo uri)
+            repo: name of the repository  
+            branch: name of specific branch 
+            file_path: relative path to file that follows branch name in uri
 
-    def get_content_by_uri(self, uri: str) -> str:
-        """ Fetch the conten of the file specified. """
+        Return:
+            str: content of the file
+        """
 
-        # TODO
-        return
+        # Query to get package info
+        query = """
+                    query GetDependencies($userString: String!, $repositoryString: String!, $expression: String!) {
+                        repository(name:$repositoryString, owner:$userString){
+                            name
+                            refs(first: 100, refPrefix: "refs/heads/") {
+                                nodes {
+                                    name
+                                }
+                            }
+                            object(expression:$expression){
+                            ... on Blob {
+                                text
+                            }
+                            }
+                        }
+                    }
+                """
 
-    def get_uris_by_repo(self, repo: str) -> list:
-        """ Fetch the all depende of the file specified. """
+        # Vars for the query
+        variables = f"""{{"userString": "{owner}",
+                        "repositoryString": "{repo}",
+                        "expression": "{branch}:{file_path}"}}
+                    """
 
-        # TODO
-        return
+        # Construct payload for graphql
+        payload = {'query': query,
+                    'variables': variables}
 
-    def get_dependecies_uris_by_repo(self, repo: str, dependencies_file_names: list = None) -> list:
-        """ Fetch the all depende of the file specified. """
+        # Call v4 API
+        res = requests.post(GITHUB_GRAPHQL_URL, headers=self.request_headers, data=json.dumps(payload))
 
-        uris = self.get_uris_by_repo(repo)
+        # Fetch the text that contains the package.json inner text
+        return res.json()['data']['repository']['object']['text']
 
-        # TODO filter etc.
-        return uris
+
+    def get_uris_by_name_with_owner(self, name_with_owner: str, branch:str) -> list:
+        """ Fetch the all depende of the file specified.
+        Args:
+            name_with_owner (str): name with owner of the repo to fetch paths from
+
+            branch(str): name of the branch
+
+        Return:
+            list: list of dicts {"path": string, "language": string} to all dependencies files
+        """
+
+    
+         # Split qualified repo name into user nae and repo name
+        user_name, repo_name = name_with_owner.split('/')
+        
+
+        # Call API to get the structure of the repo (specific branch) i.e. tree # TODO default branch
+        find_manifest_url = f"https://api.github.com/repos/{user_name}/{repo_name}/git/trees/{branch}?recursive=1"
+        repo_path_obj = requests.get(find_manifest_url, headers=self.request_headers)
+        repo_path_json = repo_path_obj.json()
+        tree = repo_path_json['tree']  # Fetch the attribute needed that has tree info
+
+        # Placeholders objects
+        paths_list = []
+
+        # For each language
+        for lang in SUPPORTED_LANGUAGES.keys():
+            # Create expression with branch name in it
+            file_name_to_find = SUPPORTED_LANGUAGES[lang]['dependencies_file']
+
+            # Loop thru leafs looking for the dependencies file name match
+            for leaf in tree:
+                path_to_manifest = leaf['path']
+                if file_name_to_find in path_to_manifest:
+                    paths_list.append({"path": path_to_manifest,
+                                       "language": lang})  # Append if found
+
+        return paths_list
+
 
     def get_repos(self, start_date: datetime.date = None, end_date: datetime.date = None, **kwargs):
         """
 
 
-        kwargs (language: str = None, owner: str = None, stars=5 ? ) TODO
+        kwargs (language: str = None, owner: str = None, stars=5) TODO comment this better
 
         Return:
-            nodes (generator) {'nameWithOwner': string, 'url': string, 'watchers': {'totalCount': int}}
+            nodes (generator) {"nameWithOwner": string,
+                               "url": "string",
+                               "watchers': {"totalCount": int},
+                               "defaultBranchRef': {
+                                  "name": "string"
+                               }
         """
-                        
+
         language = kwargs.get('language')
         owner = kwargs.get('owner')
         stars = kwargs.get('stars')
@@ -74,7 +148,6 @@ class GithubScraper(object):
 
                 """
 
-           
                 query = """
                     query SearchMostTop10Star($queryString: String!, $maybeAfter: String, $numberOfNodes: Int) {
                         search(query: $queryString, type: REPOSITORY, first: $numberOfNodes, after: $maybeAfter) {
@@ -83,6 +156,9 @@ class GithubScraper(object):
                                     ... on Repository {
                                         nameWithOwner
                                         url
+                                        defaultBranchRef{
+                                          name
+                                        }
                                         watchers {
                                             totalCount
                                         }
@@ -99,7 +175,7 @@ class GithubScraper(object):
                 stars_filter = f"stars:>{stars}" if stars else ''
                 owner_filter = f"user:{owner}" if owner else ''
                 date_range_filter = f"pushed: {date_range_str}" if date_range_str else ''
-                
+
                 variables = {
                     "queryString": ' '.join([language_filter, stars_filter, owner_filter, date_range_filter]),
                     "maybeAfter": cursor,
@@ -107,8 +183,9 @@ class GithubScraper(object):
                 }
 
                 request = requests.post(GithubScraper._GITHUB_V4_URL,
-                                    json={'query': query, 'variables': variables},
-                                    headers=self.request_headers)
+                                        json={'query': query,
+                                              'variables': variables},
+                                        headers=self.request_headers)
 
                 result = request.json()
 
@@ -125,6 +202,6 @@ class GithubScraper(object):
 
             except (ValueError, TypeError, KeyError) as exc:
                 # pylint: disable=line-too-long
-                self.logger.warning( f"Could not run query starting at {cursor} for {date_range_str}: {exc}: {result}")
+                self.logger.warning(
+                    f"Could not run query starting at {cursor} for {date_range_str}: {exc}: {result}")
                 break
-
