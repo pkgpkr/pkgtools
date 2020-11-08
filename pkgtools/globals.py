@@ -1,3 +1,5 @@
+import re
+
 # Language support constants
 JAVASCRIPT = 'javascript'
 PYTHON = 'python'
@@ -12,3 +14,5 @@ SUPPORTED_LANGUAGES = {JAVASCRIPT: {'dependencies_file': JAVASCRIPT_DEPENDENCY_F
                        JAVA: {'dependencies_file': JAVA_DEPENDENCY_FNAME, 'prefix': 'pkg:maven/'}}
 
 GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql'
+
+MAJOR_VERSION_REGEX = re.compile(r'\d+')

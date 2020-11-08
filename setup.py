@@ -15,7 +15,7 @@ def version_check():
 
 def setup_package():
       setup(name='pkgtools',
-            version='0.1',
+            version='0.1.1',
             description='Easy scraping and parsing of package dependencies.',
             packages=['pkgtools', 'pkgtools.scraper', 'pkgtools.parser'],
             install_requires=parse_requirements('requirements.txt'),

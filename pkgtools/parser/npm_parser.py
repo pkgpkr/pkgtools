@@ -1,12 +1,14 @@
 import logging
+from .parser import Parser
+from ..globals import MAJOR_VERSION_REGEX
 
-
-class NpmParser(object):
+class NpmParser(Parser):
 
     def __init__(self):
+        super().__init__()
         self.logger = logging.getLogger(__name__)
 
-    def dependencies_to_purls(self, dependencies):
+    def dependencies_to_purls(self, dependencies, major_version_only=False):
         """
         Convert Javascript dependency names to the universal Package URL (PURL) format
 
@@ -19,10 +21,18 @@ class NpmParser(object):
 
         purl_dependencies = []
 
-        for name, version in dependencies.items():
-            # Remove ~ and ^ from versions
-            clean_version = version.strip('~').strip('^')
+        if isinstance(dependencies, dict):
+            for name, version in dependencies.items():
+                # Remove ~ and ^ from versions
+                clean_version = str(version).strip('~').strip('^')
 
-            purl_dependencies.append(f'pkg:npm/{name}@{clean_version}')
+                if major_version_only and clean_version:
+                    # Extract the major version number from the version string
+                    result = MAJOR_VERSION_REGEX.search(clean_version)
+                    if not result:
+                        continue
+                    clean_version = result.group()
+
+                purl_dependencies.append(f'pkg:npm/{name}@{clean_version}')
 
         return purl_dependencies

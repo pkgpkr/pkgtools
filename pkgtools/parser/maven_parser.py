@@ -1,12 +1,15 @@
 import logging
 import xml.etree.ElementTree as xml
+from .parser import Parser
+from ..globals import MAJOR_VERSION_REGEX
 
-class MavenParser(object):
+class MavenParser(Parser):
 
     def __init__(self):
+        super().__init__()
         self.logger = logging.getLogger(__name__)
 
-    def dependencies_to_purls(self, dependencies_object):
+    def dependencies_to_purls(self, dependencies_object, major_version_only=False):
         """
         Convert Java dependencies names to the universal Package URL (PURL) format
 
@@ -43,6 +46,13 @@ class MavenParser(object):
 
                         if value.find('$') >= 0:
                             value = ''
+
+                        if major_version_only and value:
+                            # Extract the major version number from the version string
+                            result = MAJOR_VERSION_REGEX.search(value)
+                            if not result:
+                                continue
+                            value = result.group()
 
                         purl_dependencies.append(f'pkg:maven/{groupId.text}/{artifactId.text}@{value}')
                     else:
