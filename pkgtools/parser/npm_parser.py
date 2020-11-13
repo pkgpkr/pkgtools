@@ -1,3 +1,4 @@
+import json
 import logging
 from .parser import Parser
 from ..globals import MAJOR_VERSION_REGEX
@@ -19,10 +20,15 @@ class NpmParser(Parser):
             list of dependencies in P-URL format
         """
 
+        try:
+            dependencies = json.loads(dependencies)
+        except json.decoder.JSONDecodeError:
+            raise ValueError()
+
         purl_dependencies = []
 
-        if isinstance(dependencies, dict):
-            for name, version in dependencies.items():
+        if dependencies.get('dependencies'):
+            for name, version in dependencies.get('dependencies').items():
                 # Remove ~ and ^ from versions
                 clean_version = str(version).strip('~').strip('^')
 
